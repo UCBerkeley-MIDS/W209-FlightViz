@@ -160,7 +160,11 @@ flight_viz_lib.filterControl = function(){
 		d3.selectAll("#flights").remove();
 
 		if ($('input:radio[name=routetype]:checked').val() === "Airline Routes") {
-			if (airline_id_filter === no_airline_selected) {} else {
+			if (airline_id_filter === no_airline_selected) {
+                d3.selectAll("#flights").remove();
+                $("#barchart-svg").empty();
+                $("#barchart-lengend-svg").empty();
+			} else {
 				if (origin_airport_filter === no_src_port_selected) { // no src port
 					routemapcb.plotroutes(function(d) {return d.airline_ID === airline_id_filter && d.trip_dist <= max_dist_filter});
 					barchartcb.makeChart(function(d) {return d.airline_ID === airline_id_filter && d.trip_dist <= max_dist_filter});
@@ -170,6 +174,19 @@ flight_viz_lib.filterControl = function(){
 				}
 			}
 		} else { // airport routes mode
+            if (origin_airport_filter === no_src_port_selected) {
+                d3.selectAll("#flights").remove();
+                $("#barchart-svg").empty();
+                $("#barchart-lengend-svg").empty();
+            } else {
+                if (airline_id_filter === no_airline_selected) { // no airline selected
+					distmapcb.plot_airport_routes(function(d) {return d.src_port_code === origin_airport_filter && d.trip_dist <= max_dist_filter});
+					barchartcb.makeChart(function(d) {return d.src_port_code === origin_airport_filter && d.trip_dist <= max_dist_filter});
+                } else { // has airline filter
+					distmapcb.plot_airport_routes(function(d) {return d.airline_ID === airline_id_filter && d.src_port_code === origin_airport_filter && d.trip_dist <= max_dist_filter});
+					barchartcb.makeChart(function(d) {return d.airline_ID === airline_id_filter && d.src_port_code === origin_airport_filter && d.trip_dist <= max_dist_filter});
+                }
+            }
 
 		}
 	}
@@ -195,6 +212,15 @@ flight_viz_lib.filterControl = function(){
       update_views_();
 	  showconf_();
     };
+
+    var radio_button_set_mode_ = function() {
+        d3.selectAll('button').style('background-color', '#f7f7f7');
+        distmapcb.airport_legend_off();
+        routemapcb.codeshare_legend_off();
+        resetfilters_();
+        update_views_();
+        showconf_();
+    }
 
     var airline_search_box_ = function(d){
         d3.selectAll('button').style('background-color', '#f7f7f7');
@@ -242,6 +268,7 @@ flight_viz_lib.filterControl = function(){
 		distmap: distmapcb_,
 		routemap: routemapcb_,
 		resetfilters: resetfilters_,
+        setmode: radio_button_set_mode_,
 		showconf: showconf_
     };
 
@@ -252,36 +279,72 @@ flight_viz_lib.filterControl = function(){
 
 // Start Task 3
 flight_viz_lib.distmapPlot = function(){
+    var colorScale = d3.scaleThreshold().range(d3.schemeRdBu[6])
+                       .domain([2,4,6,8,10,12]);
+    var legendLinear = d3.legendColor().cells(6).orient("vertical")
+                         .title("Number of flights")
+                         .labels([" 12 +", " 10"," 8",
+                           " 6"," 4"," 2"].reverse()).ascending(true)
+                         .labelAlign("end")
+                         .scale(colorScale); //Your color scale goes here!!!
 
-	var routes_from_airport_ = function() {
-			//var airline_distance = parseInt(this.dataset.)
-			//console.log(current_origin_id)
-		d3.selectAll("#flights").remove();
-// the following code is temporary for proof-of concept
-	     var links = flight_viz_lib.svg.append("g").attr("id", "flights")
+    var add_airport_route_legend_ = function(){
+       // legend
+        flight_viz_lib.svg.append("g")
+            .attr("id", "airport_route_legend")
+            .attr("transform",
+        "translate(" + 100 + "," + (flight_viz_lib.height - 200) + ")");
+        flight_viz_lib.svg.select("#airport_route_legend").call(legendLinear);
+    }
+
+    var clear_airport_route_legend_ = function() {
+        flight_viz_lib.svg.select("#airport_route_legend").remove();
+    }
+
+    route_counts = function(func){
+        var dest_routes = [];
+        flight_viz_lib.finalMergedRoutes.forEach(
+            function(route) {
+                if(func(route)){
+                    var idx = dest_routes.findIndex(function(d) {
+                        return d.dest_port_code === route.dest_port_code});
+                    if (idx < 0) {
+                        var item = {
+                            dest_port_code: route.dest_port_code,
+                            src_port_code: route.src_port_code,
+                            src_lat: route.src_lat,
+                            src_long: route.src_long,
+                            dest_lat: route.dest_lat,
+                            dest_long: route.dest_long,
+                            count: 1};
+                        dest_routes.push(item);
+                    }
+                    else {
+                        dest_routes[idx].count ++;
+                    }
+                }
+            }
+        );
+        return dest_routes;
+    };
+
+	var routes_from_airport_ = function(func) {
+        var dests = route_counts(func);
+
+        d3.selectAll("#flights").remove();
+        var links = flight_viz_lib.svg.append("g").attr("id", "flights")
 	     .selectAll("path.flight")
-	     .data(flight_viz_lib.finalMergedRoutes)
+	     .data(dests)
 	     .enter()
 	     .append("path")
-		   .filter(function(d) { return d.airline_ID === current_airline_id })
-			 .filter(function(d) { return d.src_port_code === current_origin_id })
-			 //.filter(function(d) { return d.src_port_code === "JFK" })
-	     .filter(function(d) { return d.trip_dist < current_max_dist })
 	     .attr("d", function(d) {
 			 return flight_viz_lib.path ({type:"LineString", coordinates: [ [d.src_long, d.src_lat], [d.dest_long, d.dest_lat] ]});
 		  })
 	     .style("fill", "none")
-	     .style("stroke-width", 0.6)
-		   .style("stroke", function(d) {
-	  		 if (d.code_share === "Y") {
-	               rt_col = "#377eb8";
-	  		 }
-	  		 else {
-	               rt_col = "#e41a1c";
-	  		 }
-	  	     return rt_col;
-	  	  })
-	     .style("stroke-opacity", 0.2);
+	     .style("stroke-width", 1)
+         .style("stroke", function(d){return colorScale(d.count);});
+
+         add_airport_route_legend_();
 	};
 
     var filterctlcb = function() {};
@@ -294,6 +357,8 @@ flight_viz_lib.distmapPlot = function(){
 
     var publicObjs = {
 		plot_airport_routes: routes_from_airport_,
+        airport_legend_on: add_airport_route_legend_,
+        airport_legend_off: clear_airport_route_legend_,
 		filterctl: filterctlcb_
     };
 
@@ -331,9 +396,15 @@ flight_viz_lib.planesData = function() {
     .attr("viewBox", "0 0 " + width + " " + height)
     .attr('width', "100%");
 
+  var legend_svg = d3.select("#barChartLegend").append("svg")
+                   .attr("id", "barchart-lengend-svg")
+                   .attr("viewBox", "0 0 " + height + " " + width)
+                   .attr('width', "100%");
+
   var barChart = function(tally) {
 	//tally has plane counts for 10 predefined categories by airline or airport
 	$("#barchart-svg").empty();
+    $("#barchart-lengend-svg").empty();
 
     var orderedPlaneCounts = Object.keys(tally)
           .map(function (equip) { return [equip, tally[equip]];})
@@ -385,6 +456,42 @@ flight_viz_lib.planesData = function() {
 	.attr('width', (s) => xScale(s[1]) - xScale(0))
 	.attr('height', yScale.bandwidth())
     .attr("fill", function(d, i) {return colorScale(d[0]); });
+
+    // legend
+    var legendRectSize = 40,
+        legendText = {'boeing_single_aisle':'Boeing Single Aisle',
+                  'boeing_twin_aisle':'Boeing Twin Aisle',
+                  'airbus_single_aisle':'Airbus Single Aisle',
+                  'airbus_twin_aisle':'Airbus Twin Aisle',
+                  'aerospatiale_regional_jet':'Aerospatiale Regional Jet',
+                  'embraer_regional_jet':'Embraer Regional Jet',
+                  'canadair_regional_jet':'Canadair Regional Jet',
+                  'de_havilland_regional_jet':'De Havilland Regional Jet',
+                  'mcDonnell_douglas':'McDonnell Douglas Jet',
+                  'other':'Other types',
+                  'notspecified':'Not specified'},
+        legendSpacing = 4;
+    var legend = legend_svg.append("g").selectAll("g").data(colorScale.domain())
+                    .enter()
+                    .append("g")
+                    .attr("class", "legend")
+                    .attr("transform", function(d, i) {
+                       var height = legendRectSize;
+                       var horz = 0;
+                       var vert = i * height;
+                       return "translate(" + horz + "," + vert + ")";
+                     });
+    legend.append("rect")
+          .attr("width", legendRectSize)
+          .attr("height", legendRectSize)
+          .style("fill", colorScale)
+          .style("stroke", colorScale);
+
+    legend.append("text")
+          .attr("x", legendRectSize + legendSpacing)
+          .attr("y", legendRectSize/2)
+          .text(function(d) { return legendText[d]; });
+
 };
 
 
@@ -542,13 +649,35 @@ flight_viz_lib.routemapPlot = function() {
  	     return rt_col;
  	  })
       .style("stroke-opacity", 0.2);
+      add_code_share_legend_();
   };
+
+  var codeShare = d3.scaleOrdinal().domain(["Codeshare: Yes", "Codeshare: No"])
+                    .range([ "#377eb8", "#e41a1c"]);
+  var legendCodeShare = d3.legendColor()
+                    .shape("path", d3.symbol().type(d3.symbolCircle).size(50)())
+                    .shapePadding(10)
+                    .scale(codeShare);
+  var add_code_share_legend_ = function(){
+      flight_viz_lib.svg.append("g")
+          .attr("id", "codeshare_legend")
+          .attr("transform",
+      "translate(" + 100 + "," + (flight_viz_lib.height - 100) + ")");
+      flight_viz_lib.svg.select("#codeshare_legend").call(legendCodeShare);
+  };
+
+  var clear_airport_route_legend_ = function() {
+      flight_viz_lib.svg.select("#codeshare_legend").remove();
+  }
 
   var clear_routes_ = function () {
 	  d3.selectAll('button').style('background-color', '#f7f7f7');
 	  d3.select(this).style('background-color', '#ddd');
       d3.selectAll("#flights").remove();
 	  $("#barchart-svg").empty();
+      $("#barchart-lengend-svg").empty();
+      flight_viz_lib.svg.select("#airport_route_legend").remove();
+      clear_airport_route_legend_();
 	  filterctlcb.resetfilters();
   };
 
@@ -564,6 +693,7 @@ flight_viz_lib.routemapPlot = function() {
     plotworld: worldmap_,
     clearmap: clear_routes_,
     plotroutes: routemap_plot_,
+    codeshare_legend_off:clear_airport_route_legend_,
 	filterctl: filterctlcb_
   };
 
@@ -665,6 +795,11 @@ Promise.all([
       });
 	  $( "#range" ).val($( "#range-slider" ).slider( "value" ) + " nautical miles." );
     } );
+
+    // mode selection
+    $('input[type=radio][name=routetype]').change(function() {
+        fc.setmode();
+    });
 
 	//autofill for airlines
 	$.getJSON('./Data/topairlines.json', function(data) {

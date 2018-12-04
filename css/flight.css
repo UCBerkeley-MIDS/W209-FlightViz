@@ -14,6 +14,11 @@ path {
     float: left;
 }
 
+.barChartLegend {
+    width: 25%;
+    float: left;
+}
+
 .routemap {
 	width: 75%;
     float: left;

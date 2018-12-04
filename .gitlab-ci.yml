@@ -1,0 +1,17 @@
+image: alpine:latest
+
+pages:
+  stage: deploy
+  script:
+  - mkdir public
+  - mv index.html public
+  - mv js public
+  - mv css public
+  - mv Data public
+  artifacts:
+    paths:
+    - public
+    expire_in: 1 day
+  only:
+  - assignment3
+
