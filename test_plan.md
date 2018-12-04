@@ -15,3 +15,5 @@ nautical miles?
 7. What is the longest route for Lufthansa?
 
 8. Name the top 3 routes with both Delta and Southwest airlines serving the same route?
+
+9. Leaving SEA, which of the following airlines have more destinations, AA, DL, and Alaska Airlines?
