@@ -22,6 +22,16 @@ flight_viz_lib.path = d3.geoPath()
     .projection(flight_viz_lib.projection)
     .pointRadius(1);
 
+// var zoom = d3.behavior.zoom()
+// 		  .scaleExtent([1, 10])
+// 		  .on('zoom', doZoom);
+// svg.call(zoom);
+//
+// function doZoom() {
+//   flight_viz_lib.projection.attr("transform",
+//     "translate(" + d3.event.translate + ") scale(" + d3.event.scale + ")");
+// }
+
 flight_viz_lib.data = function(rd, pd, ad) {
 	flight_viz_lib.routesData = rd;
 	flight_viz_lib.airportData = pd;
@@ -341,9 +351,14 @@ flight_viz_lib.distmapPlot = function(){
 			 return flight_viz_lib.path ({type:"LineString", coordinates: [ [d.src_long, d.src_lat], [d.dest_long, d.dest_lat] ]});
 		  })
 	     .style("fill", "none")
-	     .style("stroke-width", 1)
-         .style("stroke", function(d){return colorScale(d.count);});
-
+	     .style("stroke-width", 0.6)
+         .style("stroke", function(d){return colorScale(d.count);})
+				 .on('mouseover', function(d) {
+		 			d3.select(this).style('stroke-width', 3)
+		 	})
+		 		.on('mouseout', function(d) {
+		 			d3.select(this).style('stroke-width', 0.6)
+		 	})
          add_airport_route_legend_();
 	};
 
@@ -626,6 +641,9 @@ flight_viz_lib.routemapPlot = function() {
     		.attr("fill", "red");*/
    });
   };
+	var tooltip = d3.select("body").append("div")
+        .attr("class", "tooltip")
+        .style("opacity", 0);
 
   var routemap_plot_ = function (func) {
       var links = flight_viz_lib.svg.append("g").attr("id", "flights")
@@ -648,7 +666,15 @@ flight_viz_lib.routemapPlot = function() {
  		 }
  	     return rt_col;
  	  })
-      .style("stroke-opacity", 0.2);
+    .style("stroke-opacity", 0.2)
+		.on('mouseover', function(d) {
+			d3.select(this).style('stroke-width', 2)
+										.style("stroke-opacity", 1)
+	})
+		.on('mouseout', function(d) {
+			d3.select(this).style('stroke-width', 0.6)
+										.style("stroke-opacity", 0.2)
+	})
       add_code_share_legend_();
   };
 
@@ -849,4 +875,3 @@ Promise.all([
 }).catch(function(err) {
 	// handle error here
 })
-

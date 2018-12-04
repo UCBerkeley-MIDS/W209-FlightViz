@@ -4,6 +4,27 @@ path {
   fill: #778899;
 }
 
+path:hover {
+        fill: orange;
+      }
+
+div.tooltip {
+    position: absolute;
+    text-align: center;
+    width: 60px;
+    height: 28px;
+    padding: 2px;
+    font: 12px sans-serif;
+    background: lightsteelblue;
+    border: 0px;
+    border-radius: 8px;
+    pointer-events: none;
+}
+
+.hidden {
+  display: none;
+}
+
 .container {
    width: 100%;
    overflow: hidden;
