@@ -32,6 +32,18 @@ flight_viz_lib.path = d3.geoPath()
 //     "translate(" + d3.event.translate + ") scale(" + d3.event.scale + ")");
 // }
 
+// var tooltip = d3.select("body")
+// 	.append("div")
+// 	.style("position", "absolute")
+// 	.style("z-index", "10")
+// 	.style("visibility", "hidden")
+// 	.text("a simple tooltip");
+
+// Define the div for the tooltip
+var div = d3.select("body").append("div")
+		.attr("class", "tooltip")
+		.style("opacity", 0);
+
 flight_viz_lib.data = function(rd, pd, ad) {
 	flight_viz_lib.routesData = rd;
 	flight_viz_lib.airportData = pd;
@@ -75,7 +87,7 @@ flight_viz_lib.data = function(rd, pd, ad) {
 					if (unit == "N") {
 						dist = dist * 0.8684
 					}
-					return dist;
+					return Math.round(dist);
 				}
 			}
 
@@ -355,12 +367,23 @@ flight_viz_lib.distmapPlot = function(){
          .style("stroke", function(d){return colorScale(d.count);})
 				 .on('mouseover', function(d) {
 		 			d3.select(this).style('stroke-width', 3)
+					div.transition()
+                .duration(500)
+                .style("opacity", 0.9)
+					div.html(d.src_port_code + "<br/>"  + d.dest_port_code + "<br/>")
+			       .style("left", (d3.event.pageX) + "px")
+			       .style("top", (d3.event.pageY - 28) + "px")
 		 	})
 		 		.on('mouseout', function(d) {
 		 			d3.select(this).style('stroke-width', 0.6)
+					div.transition()
+                .duration(500)
+                .style("opacity", 0)
+						//return tooltip.style("visibility", "visible")
 		 	})
          add_airport_route_legend_();
 	};
+		//links.call(tooltip);
 
     var filterctlcb = function() {};
     var filterctlcb_ = function(_) {
@@ -416,8 +439,13 @@ flight_viz_lib.planesData = function() {
                    .attr("viewBox", "0 0 " + height + " " + width)
                    .attr('width', "100%");
 
-  var barChart = function(tally) {
+  var barChart = function(tally, min_max) {
 	//tally has plane counts for 10 predefined categories by airline or airport
+
+	for(item in min_max) { //round all min/max values
+		min_max[item][0] = Math.floor(min_max[item][0] + 0.5);
+		min_max[item][1] = Math.floor(min_max[item][1] + 0.5);
+	}
 	$("#barchart-svg").empty();
     $("#barchart-lengend-svg").empty();
 
@@ -462,16 +490,54 @@ flight_viz_lib.planesData = function() {
 	   .style("text-anchor", "middle")
 	   .text("Airplane types");
 
-	svg.selectAll()
-	.data(orderedPlaneCounts)
-	.enter()
-	.append('rect')
+	var bars = svg.selectAll(".bar")
+			.data(orderedPlaneCounts)
+			.enter()
+			.append("g");
+
+	var tooltip = d3.select("body").append("div")
+			 .attr("class", "tooltip2")
+			 .style("opacity", 0);
+
+	bars.append('rect')
 	.attr('x', xScale(0))
 	.attr('y', (s) => yScale(s[0]))
 	.attr('width', (s) => xScale(s[1]) - xScale(0))
 	.attr('height', yScale.bandwidth())
-    .attr("fill", function(d, i) {return colorScale(d[0]); });
+  .attr("fill", function(d, i) {return colorScale(d[0]); })
+	.on("mouseover", function(s) {
+		tooltip.transition()
+				.duration(200)
+				.style("opacity", .9);
+		tooltip.html("Min flight distance: " + min_max[s[0]][0] + "<br>Max flight distance: " + min_max[s[0]][1] )
+				.style("left", (d3.event.pageX) + "px")
+				.style("top", (d3.event.pageY - 28) + "px");
+		})
+  .on("mouseout", function(d) {
+		tooltip.transition()
+		.duration(200)
+		.style("opacity", 0);
+				        });
 
+		// bars.append("text")
+		// 		.attr("class", "label")
+		// 		//y position of the label is halfway down the bar
+		// 		.attr("y", function (d) {
+		// 				return y(d.name) + y.rangeBand() / 2 + 4;
+		// 		})
+		// 		//x position is 3 pixels to the right of the bar
+		// 		.attr("x", function (d) {
+		// 				return x(d.value) + 3;
+		// 		})
+		// 		.text(function (d) {
+		// 				return d.value;
+		// 		});
+
+		bars.append('text')
+			.attr("class", "label")
+			.attr('y', (s) => yScale(s[0]) + 20)
+			.attr('x', (s) => xScale(s[1]) - xScale(0) + 80)
+			.text((s) => s[1] + "");
     // legend
     var legendRectSize = 40,
         legendText = {'boeing_single_aisle':'Boeing Single Aisle',
@@ -511,14 +577,16 @@ flight_viz_lib.planesData = function() {
 
 
   var makeChart_ = function(func) {
-	var tally = planesCount(func);
-	barChart(tally);
+	var result = planesCount(func);
+	barChart(result[0], result[1]);
   };
+
+
 
   //take match function as an argument (match can be airline or source airport)
   //count airplanes in predefine categories upon match
   function planesCount(func) {
-  	let plane_counts = {
+  	let tally = {
   		boeing_single_aisle: 0,
   		boeing_twin_aisle: 0,
   		airbus_single_aisle: 0,
@@ -531,43 +599,95 @@ flight_viz_lib.planesData = function() {
   		other: 0,
   		notspecified: 0
   	};
+		const START_MIN = 100000;
+		let min_max = {
+			boeing_single_aisle: [START_MIN,0], //min, max
+			boeing_twin_aisle: [START_MIN,0],
+			airbus_single_aisle: [START_MIN,0],
+			airbus_twin_aisle: [START_MIN,0],
+			aerospatiale_regional_jet: [START_MIN,0],
+			embraer_regional_jet: [START_MIN,0],
+			canadair_regional_jet: [START_MIN,0],
+			de_havilland_regional_jet: [START_MIN,0],
+			mcDonnell_douglas: [START_MIN,0],
+			other: [START_MIN,0],
+			notspecified: [START_MIN,0]
+		};
+
+		const MIN = 0;
+		const MAX = 1;
   	//like a dictionary in Python with key value pairs
   	flight_viz_lib.finalMergedRoutes.forEach(
   		function(route) {
+				var trip_dist = route.trip_dist;
+				var ref;
   			if (func(route)) {
   				switch (route.airplane_type) {
   					case 'Boeing single aisle':
-  						plane_counts.boeing_single_aisle ++;
+  						tally.boeing_single_aisle ++;
+							ref = min_max.boeing_single_aisle;
+							ref[MIN] = (trip_dist < ref[MIN]) ? trip_dist : ref[MIN];
+							ref[MAX] = (trip_dist > ref[MAX]) ? trip_dist : ref[MAX];
   						break;
   					case 'Airbus single aisle':
-  						plane_counts.airbus_single_aisle ++;
+  						tally.airbus_single_aisle ++;
+							ref = min_max.airbus_single_aisle;
+							ref[MIN] = (trip_dist < ref[MIN]) ? trip_dist : ref[MIN];
+							ref[MAX] = (trip_dist > ref[MAX]) ? trip_dist : ref[MAX];
   						break;
   					case 'Boeing twin aisle':
-  						plane_counts.boeing_twin_aisle ++;
+  						tally.boeing_twin_aisle ++;
+							ref = min_max.boeing_twin_aisle;
+							ref[MIN] = (trip_dist < ref[MIN]) ? trip_dist : ref[MIN];
+							ref[MAX] = (trip_dist > ref[MAX]) ? trip_dist : ref[MAX];
   						break;
   					case 'Airbus twin aisle':
-  						plane_counts.airbus_twin_aisle ++;
+  						tally.airbus_twin_aisle ++;
+							ref = min_max.airbus_twin_aisle;
+							ref[MIN] = (trip_dist < ref[MIN]) ? trip_dist : ref[MIN];
+							ref[MAX] = (trip_dist > ref[MAX]) ? trip_dist : ref[MAX];
   						break;
   					case 'Aerospatiale Regional Jet':
-  						plane_counts.aerospatiale_regional_jet ++;
+  						tally.aerospatiale_regional_jet ++;
+							ref = min_max.aerospatiale_regional_jet;
+							ref[MIN] = (trip_dist < ref[MIN]) ? trip_dist : ref[MIN];
+							ref[MAX] = (trip_dist > ref[MAX]) ? trip_dist : ref[MAX];
   						break;
   					case 'Embraer Regional Jet':
-  						plane_counts.embraer_regional_jet ++;
+  						tally.embraer_regional_jet ++;
+							ref = min_max.embraer_regional_jet;
+							ref[MIN] = (trip_dist < ref[MIN]) ? trip_dist : ref[MIN];
+							ref[MAX] = (trip_dist > ref[MAX]) ? trip_dist : ref[MAX];
   						break;
   					case 'Canadair Regional Jet':
-  						plane_counts.canadair_regional_jet ++;
+  						tally.canadair_regional_jet ++;
+							ref = min_max.canadair_regional_jet;
+							ref[MIN] = (trip_dist < ref[MIN]) ? trip_dist : ref[MIN];
+							ref[MAX] = (trip_dist > ref[MAX]) ? trip_dist : ref[MAX];
   						break;
   					case 'De Havilland Canada Regional Jet':
-  						plane_counts.de_havilland_regional_jet ++;
+  						tally.de_havilland_regional_jet ++;
+							ref = min_max.de_havilland_regional_jet;
+							ref[MIN] = (trip_dist < ref[MIN]) ? trip_dist : ref[MIN];
+							ref[MAX] = (trip_dist > ref[MAX]) ? trip_dist : ref[MAX];
   						break;
   					case 'McDonnell Douglas (merged with Boeing)':
-  						plane_counts.mcDonnell_douglas ++;
+  						tally.mcDonnell_douglas ++;
+							ref = min_max.mcDonnell_douglas;
+							ref[MIN] = (trip_dist < ref[MIN]) ? trip_dist : ref[MIN];
+							ref[MAX] = (trip_dist > ref[MAX]) ? trip_dist : ref[MAX];
   						break;
   					case 'Other':
-  						plane_counts.other ++;
+  						tally.other ++;
+							ref = min_max.other;
+							ref[MIN] = (trip_dist < ref[MIN]) ? trip_dist : ref[MIN];
+							ref[MAX] = (trip_dist > ref[MAX]) ? trip_dist : ref[MAX];
   						break;
   					case 'None':
-  						plane_counts.notspecified ++;
+  						tally.notspecified ++;
+							ref = min_max.notspecified;
+							ref[MIN] = (trip_dist < ref[MIN]) ? trip_dist : ref[MIN];
+							ref[MAX] = (trip_dist > ref[MAX]) ? trip_dist : ref[MAX];
   						break;
   					default:
   						console.log(route.airplane_type);
@@ -577,7 +697,7 @@ flight_viz_lib.planesData = function() {
   		}
   	);
 
-  	return plane_counts;
+  	return [tally, min_max];
   };
 
   var filterctlcb = function() {};
@@ -598,6 +718,7 @@ flight_viz_lib.planesData = function() {
   }
 
 // End of Task 2
+
 
 // Start of Task 1
 flight_viz_lib.routemapPlot = function() {
@@ -641,9 +762,6 @@ flight_viz_lib.routemapPlot = function() {
     		.attr("fill", "red");*/
    });
   };
-	var tooltip = d3.select("body").append("div")
-        .attr("class", "tooltip")
-        .style("opacity", 0);
 
   var routemap_plot_ = function (func) {
       var links = flight_viz_lib.svg.append("g").attr("id", "flights")
@@ -670,10 +788,17 @@ flight_viz_lib.routemapPlot = function() {
 		.on('mouseover', function(d) {
 			d3.select(this).style('stroke-width', 2)
 										.style("stroke-opacity", 1)
+			div.transition()
+				.style("opacity", 0.9)
+			div.html(d.src_port_code + "<br/>"  + d.dest_port_code + "<br/>" + d.trip_dist + "NM")
+				 .style("left", (d3.event.pageX) + "px")
+				 .style("top", (d3.event.pageY - 28) + "px")
 	})
 		.on('mouseout', function(d) {
 			d3.select(this).style('stroke-width', 0.6)
 										.style("stroke-opacity", 0.2)
+			div.transition()
+				.style("opacity", 0)
 	})
       add_code_share_legend_();
   };
